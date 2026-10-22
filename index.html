@@ -977,7 +977,7 @@
                             <p class="text-sm text-gray-700"><span class="font-semibold">Titular:</span> Agustín Cad Forni</p>
                         </div>
                     </div>
-                    <p id="copy-alias-msg" class="hidden text-sm text-secondary-600">¡Copiado!</p>
+                    <p id="copy-alias-msg" role="status" aria-live="polite" class="hidden text-sm text-secondary-600">¡Copiado!</p>
                 </div>
 
                 <div class="space-y-3">
@@ -986,11 +986,17 @@
                         <i class="fa-solid fa-up-right-from-square mr-2"></i>
                         Abrir App de Mercado Pago / Transferir
                     </a>
-                    <a id="mp-notify-whatsapp" href="#" target="_blank" rel="noopener noreferrer"
+                    <a id="mp-notify-whatsapp"
+                        href="https://wa.me/5492634552606?text=Hola%21%20Quiero%20notificar%20un%20pago%20al%20alias%20agustincadforni.mp"
+                        target="_blank" rel="noopener noreferrer"
                         class="w-full inline-flex items-center justify-center px-5 py-3 text-base font-semibold text-primary-900 bg-white border-2 border-[#009ee3] hover:bg-[#009ee3]/5 rounded-lg transition-all duration-200">
                         <i data-lucide="message-circle" class="mr-2 h-5 w-5 text-[#009ee3]"></i>
                         Notificar pago por WhatsApp
                     </a>
+                    <p class="text-xs text-gray-500 text-center leading-relaxed">
+                        En el celular abrimos directamente la app de Mercado Pago. Si no la tenés instalada, te
+                        redirigimos a mercadopago.com.ar.
+                    </p>
                 </div>
             </div>
         </div>
@@ -1137,6 +1143,112 @@
                             copyAliasText.textContent = "Copiar Alias";
                         }
                     }, 2000);
+                });
+            }
+
+            // ---------- Apertura de la App de Mercado Pago (deep linking móvil) ----------
+            const MP_WEB_URL = "https://www.mercadopago.com.ar";
+            const MP_ALIAS = "agustincadforni.mp";
+            const mpOpenApp = document.getElementById("mp-open-app");
+            let mpOpeningApp = false;
+
+            function isMobileDevice() {
+                const ua = navigator.userAgent || "";
+                const mobileUA = /android|iphone|ipad|ipod|iemobile|opera mini|mobile|windows phone|blackberry|kindle/i.test(ua);
+                // iPadOS 13+ se identifica como macOS, pero tiene pantalla táctil
+                const iPadOS = /macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+                return mobileUA || iPadOS;
+            }
+
+            function buildMercadoPagoDeepLinks() {
+                const alias = encodeURIComponent(MP_ALIAS);
+
+                if (/android/i.test(navigator.userAgent || "")) {
+                    // Android: intent nativo con el paquete oficial y fallback web incluido
+                    return [
+                        "intent://transfer?alias=" + alias + "#Intent;scheme=mpago;package=com.mercadopago.wallet;S.browser_fallback_url=" + encodeURIComponent(MP_WEB_URL) + ";end",
+                        "mpago://",
+                        "mercadopago://"
+                    ];
+                }
+
+                // iOS: esquemas de URL registrados por la app
+                return [
+                    "mpago://",
+                    "mercadopago://",
+                    "mpago://transfer?alias=" + alias
+                ];
+            }
+
+            function openMercadoPagoApp() {
+                if (!isMobileDevice()) {
+                    window.open(MP_WEB_URL, "_blank", "noopener,noreferrer");
+                    return;
+                }
+                if (mpOpeningApp) return;
+                mpOpeningApp = true;
+
+                const deepLinks = buildMercadoPagoDeepLinks();
+                let nextIndex = 0;
+                let appOpened = false;
+                let attemptTimer = null;
+
+                function cleanup() {
+                    document.removeEventListener("visibilitychange", handleVisibilityChange);
+                    window.removeEventListener("pagehide", handleAppOpened);
+                    if (attemptTimer) {
+                        clearTimeout(attemptTimer);
+                        attemptTimer = null;
+                    }
+                    mpOpeningApp = false;
+                }
+
+                function handleAppOpened() {
+                    if (appOpened) return;
+                    appOpened = true;
+                    cleanup();
+                }
+
+                function handleVisibilityChange() {
+                    if (document.hidden) {
+                        handleAppOpened();
+                    }
+                }
+
+                function goToWebFallback() {
+                    cleanup();
+                    window.location.href = MP_WEB_URL;
+                }
+
+                function tryNextDeepLink() {
+                    if (appOpened) return;
+                    if (nextIndex >= deepLinks.length) {
+                        goToWebFallback();
+                        return;
+                    }
+                    const deepLink = deepLinks[nextIndex++];
+                    try {
+                        window.location.href = deepLink;
+                    } catch (err) {
+                        // Si el navegador bloquea el esquema, se intenta el siguiente
+                    }
+                    attemptTimer = setTimeout(tryNextDeepLink, 1200);
+                }
+
+                document.addEventListener("visibilitychange", handleVisibilityChange);
+                window.addEventListener("pagehide", handleAppOpened);
+
+                tryNextDeepLink();
+            }
+
+            if (mpOpenApp) {
+                mpOpenApp.addEventListener("click", function (e) {
+                    if (!isMobileDevice()) {
+                        // En desktop se mantiene el enlace web en una pestaña nueva
+                        return;
+                    }
+                    e.preventDefault();
+                    openMercadoPagoApp();
                 });
             }
 
